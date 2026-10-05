@@ -8,7 +8,14 @@
 name: Testing build (fork)
 
 on:
+  # The branch to build is the ref the run is dispatched on (`gh workflow run … --ref <branch>`).
   workflow_dispatch:
+    inputs:
+      ios_only:
+        # Loop fork: only the iPhone build is used, so the Android and macOS legs are skipped by default.
+        description: "Build the iOS .ipa only (skip Android + macOS)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -88,13 +95,13 @@ jobs:
             fi
           fi
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease --target "${{ github.sha }}" \
-            --title "NOOP Staging — base ${VER} · ${DATE} · ${SHA}" \
+            --title "Loop — ${GITHUB_REF_NAME} · base ${VER} · ${DATE} · ${SHA}" \
             --notes "Rolling **latest** testing build — refreshed in place, so this tag is always the newest. NOOP main + ryanbr's open PRs + vetted community PRs, built with the **NOOP Staging** identity (installs **beside** the official app, separate data). Filenames carry the base app version (\`v${VER}\`).
 
           - **Android (release)** — \`NOOP-android-v${VER}.apk\` — optimized, non-debuggable build; installs beside the official app. \`com.noop.whoop.staging\`.
           - **Android (debug)** — \`NOOP-android-debug-v${VER}.apk\` — debuggable build. \`com.noop.whoop.debug\`.
           - **macOS** — \`NOOP-macos-v${VER}.zip\` — unzip, then **right-click → Open** (ad-hoc signed, not notarized; Gatekeeper warns once). If it says *\"damaged\"*, run \`xattr -dr com.apple.quarantine /Applications/NOOP.app\`.
-          - **iOS** — \`NOOP-ios-unsigned-v${VER}.ipa\` — sideload via **AltStore / Sideloadly** (re-signs on-device); embedded watch app stripped, widget extension retained for Home/Lock-Screen widgets and Live Activities.
+          - **iOS (Loop)** — \`Loop-ios-unsigned-v${VER}.ipa\` — sideload via **AltStore / Sideloadly** (re-signs on-device); embedded watch app stripped, widget extension retained for Home/Lock-Screen widgets and Live Activities.
 
           Base app version ${VER} · built ${DATE} · \`${SHA}\`."
           # Belt-and-braces: a rolling tag is deleted with --cleanup-tag and recreated seconds later, and
@@ -108,6 +115,7 @@ jobs:
 
   android:
     needs: meta
+    if: ${{ !inputs.ios_only }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -141,6 +149,7 @@ jobs:
 
   macos:
     needs: meta
+    if: ${{ !inputs.ios_only }}
     runs-on: macos-15
     timeout-minutes: 40
     steps:
@@ -224,8 +233,8 @@ jobs:
           # provisions the shared container instead of treating both executables as entitlement-free.
           Tools/prepare-ios-sideload-app.sh "$APP"
           rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
-          zip -qr "NOOP-ios-unsigned-v${VER}.ipa" Payload
-          gh release upload "${{ needs.meta.outputs.tag }}" "NOOP-ios-unsigned-v${VER}.ipa" --repo "$GITHUB_REPOSITORY" --clobber
+          zip -qr "Loop-ios-unsigned-v${VER}.ipa" Payload
+          gh release upload "${{ needs.meta.outputs.tag }}" "Loop-ios-unsigned-v${VER}.ipa" --repo "$GITHUB_REPOSITORY" --clobber
 
   # Fork-only housekeeping: the disposable `noop-staging` branch exists ONLY to feed this build. Once every
   # platform job has finished (pass OR fail — always()), delete it so GitHub's "Compare & pull request"
